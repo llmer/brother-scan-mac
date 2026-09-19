@@ -1,0 +1,74 @@
+diff --git a/backend/brother_mfp/brother_mfp-family234.cpp b/backend/brother_mfp/brother_mfp-family234.cpp
+index c743f0a..d4564a6 100644
+--- a/backend/brother_mfp/brother_mfp-family234.cpp
++++ b/backend/brother_mfp/brother_mfp-family234.cpp
+@@ -1729,6 +1729,15 @@ SANE_Status BrotherFamily4::DecodeScanDataHeader(const SANE_Byte *src_data, size
+   header.block_len = 0;
+   header.image_number = 0;
+ 
++  {
++    char hexbuf[3 * 16 + 1];
++    size_t n = src_data_len < 16 ? src_data_len : 16;
++    for (size_t i = 0; i < n; i++)
++      snprintf (hexbuf + 3 * i, 4, "%02x ", src_data[i]);
++    hexbuf[3 * n] = 0;
++    FDBG(DBG_DETAIL, "header candidate (%zu bytes): %s", src_data_len, hexbuf);
++  }
++
+   /*
+    * Error conditions. Single bytes: 0xc*
+    *
+@@ -1799,12 +1808,23 @@ SANE_Status BrotherFamily4::DecodeScanDataHeader(const SANE_Byte *src_data, size
+ 	}
+       if (header.block_type == BROTHER_DATA_BLOCK_END_OF_IMAGE)
+ 	{
+-	  if (src_data_len < 10)
++	  /*
++	   * Bytes 1..2 are a little-endian payload length. Newer devices send
++	   * "82 07 00 nn nn 84 88 00 00 00" (10 bytes); older brscan4-era
++	   * devices such as the HL-2280DW send "82 03 00 nn nn 84" (6 bytes).
++	   *
++	   */
++	  if (src_data_len < 3)
++	    {
++	      return SANE_STATUS_GOOD;	// not enough data yet.
++	    }
++	  size_t payload_len = src_data[1] + (src_data[2] << 8);
++	  if (src_data_len < 3 + payload_len)
+ 	    {
+ 	      return SANE_STATUS_GOOD;	// not enough data yet.
+ 	    }
+-	  *src_data_consumed = 10;
+-	  header.image_number = src_data[3] + (src_data[4] << 8);
++	  *src_data_consumed = 3 + payload_len;
++	  header.image_number = (payload_len >= 2) ? src_data[3] + (src_data[4] << 8) : 0;
+ 	  FDBG(DBG_DETAIL, "read end of image [0x%2.2x] image[%d].", header.block_type,
+ 	       header.image_number);
+ 	  return SANE_STATUS_GOOD;
+diff --git a/backend/brother_mfp/brother_mfp.cpp b/backend/brother_mfp/brother_mfp.cpp
+index 0b2a748..be1d245 100644
+--- a/backend/brother_mfp/brother_mfp.cpp
++++ b/backend/brother_mfp/brother_mfp.cpp
+@@ -312,6 +312,22 @@ static Brother_Model models[] =
+       CAP_BUTTON_HAS_SCAN_IMAGE |
+       CAP_ENCODING_HAS_JPEG },
+ 
++    { "Brother", "HL-2280DW", BROTHER_FAMILY_4, 0x04f9, 0x0272,
++      { 0, SANE_FIX(215.9), 0 },
++      { 0, SANE_FIX(297), 0 },
++      { 5, 100, 150, 200, 300, 600 },
++      { 6, 100, 150, 200, 300, 600, 1200 },
++      CAP_MODE_COLOUR |
++      CAP_MODE_GRAY |
++      CAP_MODE_GRAY_DITHER |
++      CAP_MODE_BW |
++      CAP_SOURCE_HAS_FLATBED |
++      CAP_BUTTON_HAS_SCAN_EMAIL |
++      CAP_BUTTON_HAS_SCAN_FILE |
++      CAP_BUTTON_HAS_SCAN_OCR |
++      CAP_BUTTON_HAS_SCAN_IMAGE |
++      CAP_ENCODING_HAS_JPEG },
++
+     { "Brother", "MFC-8910DW", BROTHER_FAMILY_4, 0x04f9, 0x0298,
+       { 0, SANE_FIX(211.5), 0 },
+       { 0, SANE_FIX(297), 0 },

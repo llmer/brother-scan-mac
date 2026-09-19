@@ -1,0 +1,6 @@
+sane-prefix/
+driver/sane-backends-src/
+BrotherScan.app/
+scan-cli
+*.pdf
+.DS_Store
